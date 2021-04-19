@@ -35,13 +35,27 @@ defmodule Manifest.Step do
   end
 
   defmodule NotAFunctionError do
-    defexception [:message]
+    defexception [:key, :value]
 
     @impl true
-    def exception(key, value),
-      do: %__MODULE__{
-        message: "#{inspect(key)} must have a function for it's value, received: #{inspect(value)}"
-      }
+    def message(%__MODULE__{key: key, value: value}),
+      do: "#{inspect(key)} must have a function for it's value, received: #{inspect(value)}"
+  end
+
+  defmodule MalformedReturnError do
+    defexception [:function, :term]
+
+    @impl true
+    def message(%__MODULE__{function: :work, term: term}),
+      do: format("three", ", {:ok, :no_rollback, term()},", term)
+
+    def message(%__MODULE__{function: _, term: term}), do: format("two", term)
+
+    defp format(text_number, possible \\ nil, term),
+      do:
+        "Was expecting one of #{text_number} return values ({:ok, term()}#{possible} or {:error, term()}), but got #{
+          inspect(term)
+        }"
   end
 
   @doc false

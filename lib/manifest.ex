@@ -8,15 +8,17 @@ defmodule Manifest do
 
   import __MODULE__.Step, only: [step: 1]
   alias __MODULE__.Step
+  alias __MODULE__.Step.{MalformedReturnError, NotAnAtomError, NotAFunctionError}
 
-  defstruct previous: %{}, steps: [], rollbacks: [], halt?: false, errored: nil
+  defstruct previous: %{}, steps: [], rollbacks: [], halt?: false, errored: nil, reason: nil
 
   @type t :: %__MODULE__{
           steps: [Step.t()],
           previous: map(),
           rollbacks: [Step.rollback()],
           halt?: boolean(),
-          errored: Step.operation()
+          errored: Step.operation(),
+          reason: any()
         }
 
   @doc """
@@ -35,11 +37,6 @@ defmodule Manifest do
 
   See `Manifest.Step` for more information on what a step is.
   """
-  @spec add_step(t(), atom(), __MODULE__.Step.work(), __MODULE__.Step.rollback()) :: t()
-  def add_step(manifest, operation, work, rollback) do
-    step = step(operation: operation, work: work, rollback: rollback)
-    Map.update(manifest, :steps, [step], &[step | &1])
-  end
 
   @spec add_step(
           t(),
@@ -48,6 +45,20 @@ defmodule Manifest do
           __MODULE__.Step.rollback(),
           __MODULE__.Step.parser()
         ) :: t()
+  def add_step(manifest, operation, work, rollback, parser \\ &Step.default_parser/1)
+
+  def add_step(_manifest, operation, _work, _rollback, _parser) when not is_atom(operation),
+    do: raise(NotAnAtomError, operation)
+
+  def add_step(_manifest, _operation, work, _rollback, _parser) when not is_function(work),
+    do: raise(NotAFunctionError, key: :work, value: work)
+
+  def add_step(_manifest, _operation, _work, rollback, _parser) when not is_function(rollback),
+    do: raise(NotAFunctionError, key: :rollback, value: rollback)
+
+  def add_step(_manifest, _operation, _work, _rollback, parser) when not is_function(parser),
+    do: raise(NotAFunctionError, key: :parser, value: parser)
+
   def add_step(manifest, operation, work, rollback, parser) do
     step = step(operation: operation, work: work, parser: parser, rollback: rollback)
     Map.update(manifest, :steps, [step], &[step | &1])
@@ -73,22 +84,6 @@ defmodule Manifest do
   @spec perform(t()) :: t()
   def perform(%__MODULE__{steps: steps} = manifest), do: perform(Enum.reverse(steps), manifest)
 
-  defp perform([], manifest), do: manifest
-
-  defp perform(_, %__MODULE__{halt?: true} = manifest), do: manifest
-
-  defp perform(
-         [step(work: work) = step | rest],
-         %__MODULE__{halt?: false, previous: previous} = manifest
-       ) do
-    manifest =
-      previous
-      |> work.()
-      |> handle_results(manifest, step)
-
-    perform(rest, manifest)
-  end
-
   @doc """
   Reports on the results of `perform/1`.
 
@@ -101,8 +96,8 @@ defmodule Manifest do
   return of `Ecto.Repo.transaction/1` when given an `Ecto.Multi`.
   """
   @spec digest(t()) :: {:ok, map()} | {:error, atom(), any(), map()}
-  def digest(%__MODULE__{halt?: true, errored: operation, previous: previous}),
-    do: {:error, operation, Map.get(previous, operation), previous}
+  def digest(%__MODULE__{halt?: true, errored: operation, reason: reason, previous: previous}),
+    do: {:error, operation, reason, previous}
 
   def digest(%__MODULE__{halt?: false, previous: previous}), do: {:ok, previous}
 
@@ -129,23 +124,47 @@ defmodule Manifest do
   @spec rollback(t()) :: {:ok, map()} | {:error, {atom(), any()}, map()}
   def rollback(%__MODULE__{rollbacks: rollbacks}), do: rollback(rollbacks, %{})
 
-  defp handle_results({:error, error}, manifest, step(operation: operation)) do
-    manifest
-    |> put_previous(operation, error)
-    |> Map.merge(%{halt?: true, errored: operation})
-  end
+  defp perform([], manifest), do: manifest
 
-  defp handle_results({:ok, :no_rollback, return}, manifest, step(operation: operation)),
-    do: put_previous(manifest, operation, return)
+  defp perform(_, %__MODULE__{halt?: true} = manifest), do: manifest
 
-  defp handle_results({:ok, return}, manifest, step(operation: operation, parser: parser, rollback: rollback)) do
+  defp perform(
+         [step(operation: operation, work: work) = step | rest],
+         %__MODULE__{halt?: false, previous: previous} = manifest
+       ) do
     manifest =
-      case parser.(return) do
-        {:ok, identifier} -> stack_rollback(manifest, operation, {rollback, identifier})
-        {:error, _reason} -> Map.merge(manifest, %{halt?: true, errored: operation})
+      case work.(previous) do
+        {:error, reason} ->
+          Map.merge(manifest, %{halt?: true, errored: operation, reason: reason})
+
+        {:ok, :no_rollback, return} ->
+          put_previous(manifest, operation, return)
+
+        {:ok, return} ->
+          handle_return(return, manifest, step)
       end
 
-    put_previous(manifest, operation, return)
+    perform(rest, manifest)
+  rescue
+    e in CaseClauseError -> raise MalformedReturnError, function: :work, term: e.term
+  end
+
+  defp handle_return(
+         return,
+         manifest,
+         step(operation: operation, parser: parser, rollback: rollback)
+       ) do
+    case parser.(return) do
+      {:ok, identifier} ->
+        manifest
+        |> stack_rollback(operation, {rollback, identifier})
+        |> put_previous(operation, return)
+
+      {:error, reason} ->
+        Map.merge(manifest, %{halt?: true, errored: operation, reason: reason})
+    end
+  rescue
+    e in CaseClauseError -> raise MalformedReturnError, function: :parser, term: e.term
   end
 
   defp put_previous(manifest, operation, return),
@@ -164,5 +183,7 @@ defmodule Manifest do
       {:error, reason} -> {:error, operation, reason, acc}
       {_, return} -> rollback(rest, Map.put(acc, operation, return))
     end
+  rescue
+    e in CaseClauseError -> raise MalformedReturnError, function: :rollback, term: e.term
   end
 end

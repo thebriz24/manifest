@@ -21,19 +21,22 @@ end
 
 defmodule Example do
   def push_multiple_elements(pid, outcome \\ :succeed)
+
   def push_multiple_elements(pid, :succeed) do
-    manifest = Manifest.new()
-    |> Manifest.add_step(
-       :first,
-       fn _previous -> push_number(pid, 5) end,
-       fn _item -> {:ok, GenServer.call(pid, :pop)} end
-    )
-    |> Manifest.add_step(
-       :second,
-       &push_number(pid, &1[:first] + 5),
-       fn _item -> {:ok, GenServer.call(pid, :pop)} end
-    )
-    |> Manifest.perform()
+    manifest =
+      Manifest.new()
+      |> Manifest.add_step(
+        :first,
+        fn _previous -> push_number(pid, 5) end,
+        fn _item -> {:ok, GenServer.call(pid, :pop)} end
+      )
+      |> Manifest.add_step(
+        :second,
+        &push_number(pid, &1[:first] + 5),
+        fn _item -> {:ok, GenServer.call(pid, :pop)} end
+      )
+      |> Manifest.perform()
+
     {manifest, Manifest.digest(manifest)}
   end
 
@@ -41,7 +44,7 @@ defmodule Example do
     manifest =
       Manifest.new()
       |> Manifest.add_step(
-       :first,
+        :first,
         fn _previous -> push_number(pid, 5) end,
         fn _item -> {:ok, GenServer.call(pid, :pop)} end
       )
