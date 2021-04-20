@@ -59,7 +59,7 @@ defmodule Manifest.Step do
   end
 
   @doc false
-  def default_work(_previous), do: %{}
+  def default_work(_previous), do: {:ok, :no_rollback, %{}}
   @doc false
   def default_parser(identifier), do: {:ok, identifier}
   @doc false
