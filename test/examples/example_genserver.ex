@@ -1,70 +1,31 @@
-defmodule Stack do
-  use GenServer
+defmodule Cache do
+  use Agent
 
-  # Callbacks
-
-  @impl true
-  def init(stack) do
-    {:ok, stack}
+  def start_link() do
+    Agent.start_link(fn -> %{} end, name: __MODULE__)
   end
 
-  @impl true
-  def handle_call(:pop, _from, [head | tail]) do
-    {:reply, head, tail}
+  def lookup(pid, token, key) do
+    do_if_authenticated(token, fn -> Agent.get(pid, fn state -> state[key] end) end)
   end
 
-  @impl true
-  def handle_cast({:push, element}, state) do
-    {:noreply, [element | state]}
-  end
-end
-
-defmodule Example do
-  def push_multiple_elements(pid, outcome \\ :succeed)
-
-  def push_multiple_elements(pid, :succeed) do
-    manifest =
-      Manifest.new()
-      |> Manifest.add_step(
-        :first,
-        fn _previous -> push_number(pid, 5) end,
-        fn _item -> {:ok, GenServer.call(pid, :pop)} end
-      )
-      |> Manifest.add_step(
-        :second,
-        &push_number(pid, &1[:first] + 5),
-        fn _item -> {:ok, GenServer.call(pid, :pop)} end
-      )
-      |> Manifest.perform()
-
-    {manifest, Manifest.digest(manifest)}
+  def put(pid, token, key, value) do
+    do_if_authenticated(token, fn -> Agent.update(pid, &Map.put(&1, key, value)) end)
   end
 
-  def push_multiple_elements(pid, :fail) do
-    manifest =
-      Manifest.new()
-      |> Manifest.add_step(
-        :first,
-        fn _previous -> push_number(pid, 5) end,
-        fn _item -> {:ok, GenServer.call(pid, :pop)} end
-      )
-      |> Manifest.add_step(
-        :second,
-        fn _previous -> {:error, :for_test} end,
-        fn _item -> {:ok, Genserver.call(pid, :pop)} end
-      )
-      |> Manifest.perform()
-
-    {manifest, Manifest.digest(manifest)}
+  def delete(pid, token, key) do
+    do_if_authenticated(token, fn -> Agent.update(pid, &Map.delete(&1, key)) end)
   end
 
-  def rollback_example(pid) do
-    {manifest, _} = push_multiple_elements(pid, :fail)
-    Manifest.rollback(manifest)
+  def do_if_authenticated(token, function) do
+    if authenticated?(token) do
+      function.()
+    else
+      {:error, :unauthenticated}
+    end
   end
 
-  defp push_number(pid, number) do
-    GenServer.cast(pid, {:push, number})
-    {:ok, number}
+  defp authenticated?(token) do
+    Application.get_env(:manifest, :auth_token) == token
   end
 end

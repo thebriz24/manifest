@@ -45,7 +45,13 @@ defmodule Manifest do
           __MODULE__.Step.rollback(),
           __MODULE__.Step.parser()
         ) :: t()
-  def add_step(manifest, operation, work, rollback, parser \\ &Step.default_parser/1)
+  def add_step(
+        manifest,
+        operation,
+        work,
+        rollback \\ &Step.safe_default_rollback/1,
+        parser \\ &Step.default_parser/1
+      )
 
   def add_step(_manifest, operation, _work, _rollback, _parser) when not is_atom(operation),
     do: raise(NotAnAtomError, operation)
