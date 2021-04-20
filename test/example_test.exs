@@ -5,6 +5,7 @@ defmodule Example.Test do
   setup do
     token = "test_token"
     Application.put_env(:manifest, :auth_token, token)
+    on_exit(fn -> Application.delete_env(:manifest, :auth_token) end)
     {:ok, pid} = Cache.start_link()
     [pid: pid, token: token]
   end
