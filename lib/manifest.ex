@@ -84,6 +84,14 @@ defmodule Manifest do
   be added to the `:previous` field. The `t:Manifest.Step.operation/0` will be
   the key of that key-value pair.
 
+  TL;DR: There's three paths a step can take:
+
+  1.  It returns {:ok, term} in which case it will add a rollback to the stack.
+  2.  It returns {:ok, :no_rollback, term} where no rollback will be added.
+  3.  It returns {:error, term} which will halt the Manifest and no further 
+  steps will be performed. You can then choose to roll it all back where it 
+  will pop the functions off the stack.
+
   See `digest/1` as it provides an easier way of extracting pertinent 
   information on what happened during this function. 
   """
@@ -93,7 +101,7 @@ defmodule Manifest do
   @doc """
   Reports on the results of `perform/1`.
 
-  Returns an `:ok` tuple will the value of the `:previous` key which contains 
+  Returns an `:ok` tuple with the value of the `:previous` key which contains 
   the results of all the steps if all steps succeeded. Otherwise it returns an 
   `:error` tuple with the `t:Manifest.Step.operation/0`, as it's second element, 
   the results of that step's `t:Manifest.Step.work/0`, and the value of the 
