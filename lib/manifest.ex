@@ -3,7 +3,7 @@ defmodule Manifest do
   Provides a structure for ordering operations that need to happen, and how to 
   roll them back if they fail.
 
-  There are examples of usage in `test/examples`.
+  There are examples of usage in `test/example_test.exs`.
   """
 
   import __MODULE__.Step, only: [step: 1]
