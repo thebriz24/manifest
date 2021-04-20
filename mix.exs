@@ -1,28 +1,50 @@
 defmodule Manifest.MixProject do
   use Mix.Project
+  @version "0.1.0"
+  @source_url "https://github.com/thebriz24/manifest"
 
   def project do
     [
       app: :manifest,
-      version: "0.1.0",
-      elixir: "~> 1.11",
-      start_permanent: Mix.env() == :prod,
-      deps: deps()
+      version: @version,
+      elixir: ">= 1.5.0",
+      elixirc_paths: elixirc_paths(),
+      deps: deps(),
+      docs: docs(),
+      name: "Manifest",
+      package: package(),
+      description: description()
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
-  def application do
+  def elixirc_paths, do: if(Mix.env() != :prod, do: ["lib", "test/examples"], else: ["lib"])
+
+  def description,
+    do:
+      "Provides a structure for ordering operations that need to happen, and how to roll them back if they fail."
+
+  defp package do
     [
-      extra_applications: [:logger]
+      files: ["lib", "mix.exs"],
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => @source_url,
+        "Docs" => "https://hexdocs.pm/manifest/#{@version}"
+      },
+      maintainers: ["TPN.health", "Brandon Bennett"],
+      source_url: @source_url
+    ]
+  end
+
+  defp docs do
+    [
+      main: "Manifest",
+      source_url: @source_url
     ]
   end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
-    [
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
-    ]
+    [{:ex_doc, "~> 0.24", only: [:dev]}]
   end
 end
