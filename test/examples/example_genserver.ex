@@ -1,4 +1,5 @@
 defmodule Cache do
+  @moduledoc false
   use Agent
 
   def start_link() do
