@@ -61,7 +61,7 @@ defmodule Manifest do
   def build_step(operation, work, rollback, parser),
     do: step(operation: operation, work: work, parser: parser, rollback: rollback)
 
-  @deprecated "Use Manifest.merge/1 instead"
+  @deprecated "Use Manifest.merge/2 instead"
   @spec build_branch(Branch.conditional(), Step.t(), Step.t()) :: Branch.t()
   def build_branch(conditional, _success, _failure) when not is_function(conditional),
     do: raise(NotAFunctionError, key: :conditional, value: conditional)
@@ -104,7 +104,7 @@ defmodule Manifest do
     add_step(manifest, step)
   end
 
-  @deprecated "Use Manifest.merge/1 instead"
+  @deprecated "Use Manifest.merge/2 instead"
   @doc """
   Adds either the first step or the second based on the truthy-ness of the 
   given `conditional` function.
