@@ -4,6 +4,7 @@ defmodule Manifest.Branch do
   different steps. When the conditional returns a true value then the success 
   step is performed, otherwise the failure step is performed.
   """
+  @deprecated
   import Manifest.Step, only: [step: 0]
   import Record, only: [defrecord: 3]
 

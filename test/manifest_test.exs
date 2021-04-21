@@ -83,6 +83,28 @@ defmodule Manifest.Test do
     end
   end
 
+  describe "merge/2" do
+    test "if :merge isn't a function" do
+      assert_raise NotAFunctionError, fn ->
+        Manifest.merge(Manifest.new(), "Not a function")
+      end
+    end
+
+    test "no way to enforce arity of given functions" do
+      Manifest.merge(Manifest.new(), fn -> Manifest.new() end)
+    end
+
+    test "no way to enforce return values of given functions" do
+      Manifest.merge(Manifest.new(), fn _ -> :ok end)
+    end
+
+    test "simply prepends branch to steps list" do
+      merge = fn _ -> Manifest.new() end
+      import Manifest.Merge
+      assert %Manifest{steps: [merge(merge: ^merge)]} = Manifest.merge(Manifest.new(), merge)
+    end
+  end
+
   describe "perform/1" do
     test "functions with wrong arity will fail during runtime" do
       assert_raise BadArityError, fn ->
@@ -92,12 +114,22 @@ defmodule Manifest.Test do
         end)
         |> Manifest.perform()
       end
+      assert_raise BadArityError, fn ->
+        Manifest.new()
+        |> Manifest.merge(fn -> Manifest.new() end)
+        |> Manifest.perform()
+      end
     end
 
     test "functions with malformed returns will fail during runtime" do
       assert_raise MalformedReturnError, fn ->
         Manifest.new()
         |> Manifest.add_step(:atom, fn _ -> :not_valid_return end, fn _ -> :same end)
+        |> Manifest.perform()
+      end
+      assert_raise MalformedReturnError, fn ->
+        Manifest.new()
+        |> Manifest.merge(fn _ -> :not_valid_return end)
         |> Manifest.perform()
       end
     end

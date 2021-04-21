@@ -6,8 +6,7 @@ defmodule Manifest do
   There are examples of usage in `test/example_test.exs`.
   """
 
-  import __MODULE__.Step, only: [step: 0, step: 1]
-  import __MODULE__.Branch, only: [branch: 1, branch: 2]
+  import __MODULE__.{Branch, Merge, Step}
   alias __MODULE__.{Branch, MalformedReturnError, NotAnAtomError, NotAFunctionError, Step}
 
   defstruct previous: %{}, steps: [], rollbacks: [], halt?: false, errored: nil, reason: nil
@@ -62,8 +61,7 @@ defmodule Manifest do
   def build_step(operation, work, rollback, parser),
     do: step(operation: operation, work: work, parser: parser, rollback: rollback)
 
-  @doc """
-  """
+  @deprecated "Use Manifest.merge/1 instead"
   @spec build_branch(Branch.conditional(), Step.t(), Step.t()) :: Branch.t()
   def build_branch(conditional, _success, _failure) when not is_function(conditional),
     do: raise(NotAFunctionError, key: :conditional, value: conditional)
@@ -106,6 +104,7 @@ defmodule Manifest do
     add_step(manifest, step)
   end
 
+  @deprecated "Use Manifest.merge/1 instead"
   @doc """
   Adds either the first step or the second based on the truthy-ness of the 
   given `conditional` function.
@@ -114,6 +113,11 @@ defmodule Manifest do
   def add_branch(manifest, branch) do
     add_step(manifest, branch)
   end
+
+  def merge(_manifest, merge) when not is_function(merge),
+    do: raise(NotAFunctionError, key: :merge, value: merge)
+
+  def merge(manifest, merge), do: add_step(manifest, merge(merge: merge))
 
   @doc """
   Performs the steps in the order given to the manifest.
@@ -141,7 +145,11 @@ defmodule Manifest do
   information on what happened during this function. 
   """
   @spec perform(t()) :: t()
-  def perform(%__MODULE__{steps: steps} = manifest), do: perform(Enum.reverse(steps), manifest)
+  def perform(%__MODULE__{steps: steps} = manifest) do
+    steps
+    |> Enum.reverse()
+    |> perform(manifest)
+  end
 
   @doc """
   Reports on the results of `perform/1`.
@@ -186,6 +194,24 @@ defmodule Manifest do
   defp perform([], manifest), do: manifest
 
   defp perform(_, %__MODULE__{halt?: true} = manifest), do: manifest
+
+  defp perform(
+         [merge(merge: merge) | rest],
+         %__MODULE__{halt?: false, previous: previous} = manifest
+       ) do
+    steps =
+      case merge.(previous) do
+        %__MODULE__{steps: steps} ->
+          steps
+          |> Enum.reverse()
+          |> Enum.concat(rest)
+
+        return ->
+          raise MalformedReturnError, function: :merge, term: return
+      end
+
+    perform(steps, manifest)
+  end
 
   defp perform(
          [branch(conditional: conditional) = branch | rest],
