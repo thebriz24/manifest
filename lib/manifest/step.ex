@@ -15,7 +15,13 @@ defmodule Manifest.Step do
   @type work :: (map() -> valid_returns())
   @type parser :: (any() -> {:ok, any()} | {:error, any()})
   @type rollback :: (any() -> {:ok, any()} | {:error, any()})
-  @type t :: {__MODULE__, atom(), work(), parser(), rollback()}
+  @type t ::
+          record(:step,
+            operation: operation(),
+            work: work(),
+            parser: parser(),
+            rollback: rollback()
+          )
 
   defrecord(:step, __MODULE__,
     operation: nil,
@@ -23,40 +29,6 @@ defmodule Manifest.Step do
     parser: &__MODULE__.default_parser/1,
     rollback: &__MODULE__.safe_default_rollback/1
   )
-
-  defmodule NotAnAtomError do
-    defexception [:message]
-
-    @impl true
-    def exception(value),
-      do: %__MODULE__{
-        message: ":operation must have an atom for it's value, received: #{inspect(value)}"
-      }
-  end
-
-  defmodule NotAFunctionError do
-    defexception [:key, :value]
-
-    @impl true
-    def message(%__MODULE__{key: key, value: value}),
-      do: "#{inspect(key)} must have a function for it's value, received: #{inspect(value)}"
-  end
-
-  defmodule MalformedReturnError do
-    defexception [:function, :term]
-
-    @impl true
-    def message(%__MODULE__{function: :work, term: term}),
-      do: format("three", ", {:ok, :no_rollback, term()},", term)
-
-    def message(%__MODULE__{function: _, term: term}), do: format("two", term)
-
-    defp format(text_number, possible \\ nil, term),
-      do:
-        "Was expecting one of #{text_number} return values ({:ok, term()}#{possible} or {:error, term()}), but got #{
-          inspect(term)
-        }"
-  end
 
   @doc false
   def default_work(_previous), do: {:ok, :no_rollback, %{}}

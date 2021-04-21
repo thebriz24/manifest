@@ -6,9 +6,9 @@ defmodule Manifest do
   There are examples of usage in `test/example_test.exs`.
   """
 
-  import __MODULE__.Step, only: [step: 1]
-  alias __MODULE__.Step
-  alias __MODULE__.Step.{MalformedReturnError, NotAnAtomError, NotAFunctionError}
+  import __MODULE__.Step, only: [step: 0, step: 1]
+  import __MODULE__.Branch, only: [branch: 1, branch: 2]
+  alias __MODULE__.{Branch, MalformedReturnError, NotAnAtomError, NotAFunctionError, Step}
 
   defstruct previous: %{}, steps: [], rollbacks: [], halt?: false, errored: nil, reason: nil
 
@@ -30,14 +30,63 @@ defmodule Manifest do
   def new, do: %__MODULE__{}
 
   @doc """
+  Builds a `t:Manifest.Step.t()` from the given parameters.
+
+  See `Manifest.Step` for more information on what a step consists of.
+  """
+  @spec build_step(
+          atom(),
+          __MODULE__.Step.work(),
+          __MODULE__.Step.rollback(),
+          __MODULE__.Step.parser()
+        ) :: Step.t()
+  def build_step(
+        operation,
+        work,
+        rollback \\ &Step.safe_default_rollback/1,
+        parser \\ &Step.default_parser/1
+      )
+
+  def build_step(operation, _work, _rollback, _parser) when not is_atom(operation),
+    do: raise(NotAnAtomError, operation)
+
+  def build_step(_operation, work, _rollback, _parser) when not is_function(work),
+    do: raise(NotAFunctionError, key: :work, value: work)
+
+  def build_step(_operation, _work, rollback, _parser) when not is_function(rollback),
+    do: raise(NotAFunctionError, key: :rollback, value: rollback)
+
+  def build_step(_operation, _work, _rollback, parser) when not is_function(parser),
+    do: raise(NotAFunctionError, key: :parser, value: parser)
+
+  def build_step(operation, work, rollback, parser),
+    do: step(operation: operation, work: work, parser: parser, rollback: rollback)
+
+  @doc """
+  """
+  @spec build_branch(Branch.conditional(), Step.t(), Step.t()) :: Branch.t()
+  def build_branch(conditional, _success, _failure) when not is_function(conditional),
+    do: raise(NotAFunctionError, key: :conditional, value: conditional)
+
+  def build_branch(conditional, step() = success, step() = failure),
+    do: branch(conditional: conditional, success: success, failure: failure)
+
+  @doc """
   Adds a `Manifest.Step` to the `:steps` key of the manifest. 
 
   True to Elixir/Erlang practices, it is prepended to the list. The list is 
   reversed the work is actually performed. 
-
-  See `Manifest.Step` for more information on what a step is.
   """
 
+  @spec add_step(t(), Step.t()) :: t()
+  def add_step(manifest, step), do: Map.update(manifest, :steps, [step], &[step | &1])
+
+  @doc """
+  Combines `build_step/4` and `add_step/2` into one function.
+
+  See `add_step/2` for more information on how the steps are added and 
+  `Manifest.Step` for more information on what a step consists of.
+  """
   @spec add_step(
           t(),
           atom(),
@@ -45,29 +94,25 @@ defmodule Manifest do
           __MODULE__.Step.rollback(),
           __MODULE__.Step.parser()
         ) :: t()
+
   def add_step(
         manifest,
         operation,
         work,
         rollback \\ &Step.safe_default_rollback/1,
         parser \\ &Step.default_parser/1
-      )
+      ) do
+    step = build_step(operation, work, rollback, parser)
+    add_step(manifest, step)
+  end
 
-  def add_step(_manifest, operation, _work, _rollback, _parser) when not is_atom(operation),
-    do: raise(NotAnAtomError, operation)
-
-  def add_step(_manifest, _operation, work, _rollback, _parser) when not is_function(work),
-    do: raise(NotAFunctionError, key: :work, value: work)
-
-  def add_step(_manifest, _operation, _work, rollback, _parser) when not is_function(rollback),
-    do: raise(NotAFunctionError, key: :rollback, value: rollback)
-
-  def add_step(_manifest, _operation, _work, _rollback, parser) when not is_function(parser),
-    do: raise(NotAFunctionError, key: :parser, value: parser)
-
-  def add_step(manifest, operation, work, rollback, parser) do
-    step = step(operation: operation, work: work, parser: parser, rollback: rollback)
-    Map.update(manifest, :steps, [step], &[step | &1])
+  @doc """
+  Adds either the first step or the second based on the truthy-ness of the 
+  given `conditional` function.
+  """
+  @spec add_branch(t(), Branch.t()) :: t()
+  def add_branch(manifest, branch) do
+    add_step(manifest, branch)
   end
 
   @doc """
@@ -141,6 +186,14 @@ defmodule Manifest do
   defp perform([], manifest), do: manifest
 
   defp perform(_, %__MODULE__{halt?: true} = manifest), do: manifest
+
+  defp perform(
+         [branch(conditional: conditional) = branch | rest],
+         %__MODULE__{halt?: false, previous: previous} = manifest
+       ) do
+    next = if conditional.(previous), do: branch(branch, :success), else: branch(branch, :failure)
+    perform([next | rest], manifest)
+  end
 
   defp perform(
          [step(operation: operation, work: work) = step | rest],

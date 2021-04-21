@@ -1,47 +1,85 @@
 defmodule Manifest.Test do
   use ExUnit.Case
 
-  alias Manifest.Step.{MalformedReturnError, NotAFunctionError, NotAnAtomError}
+  alias Manifest.{MalformedReturnError, NotAFunctionError, NotAnAtomError}
 
-  describe "add_step/5" do
-    setup do
-      [placeholder: fn _ -> {:ok, nil} end]
-    end
+  setup do
+    [placeholder: fn _ -> {:ok, nil} end]
+  end
 
+  describe "build_step/4" do
     test "if :operation isn't an atom", %{placeholder: function} do
       assert_raise NotAnAtomError, fn ->
-        Manifest.add_step(Manifest.new(), "Not an atom", function, function)
+        Manifest.build_step("Not an atom", function, function)
       end
     end
 
     test "if :work isn't a function", %{placeholder: function} do
       assert_raise NotAFunctionError, fn ->
-        Manifest.add_step(Manifest.new(), :atom, "Not a function", function)
+        Manifest.build_step(:atom, "Not a function", function)
       end
     end
 
     test "if :parser isn't a function", %{placeholder: function} do
       assert_raise NotAFunctionError, fn ->
-        Manifest.add_step(Manifest.new(), :atom, function, function, "Not a function")
+        Manifest.build_step(:atom, function, function, "Not a function")
       end
     end
 
     test "if :rollback isn't a function", %{placeholder: function} do
       assert_raise NotAFunctionError, fn ->
-        Manifest.add_step(Manifest.new(), :atom, function, "Not a function")
+        Manifest.build_step(:atom, function, "Not a function")
       end
     end
 
     test "no way to enforce arity of given functions" do
-      Manifest.add_step(Manifest.new(), :atom, fn -> {:error, :not_enough_parameters} end, fn _,
-                                                                                              _,
-                                                                                              _ ->
+      Manifest.build_step(:atom, fn -> {:error, :not_enough_parameters} end, fn _, _, _ ->
         {:error, :too_many_parameters}
       end)
     end
 
     test "no way to enforce return values of given functions" do
-      Manifest.add_step(Manifest.new(), :atom, fn _ -> :not_valid_return end, fn _ -> :same end)
+      Manifest.build_step(:atom, fn _ -> :not_valid_return end, fn _ -> :same end)
+    end
+  end
+
+  describe "build_branch/3" do
+    setup %{placeholder: function} do
+      success = Manifest.build_step(:success, function)
+      failure = Manifest.build_step(:failure, function)
+      [success: success, failure: failure]
+    end
+
+    test "if :conditional isn't a function", %{success: success, failure: failure} do
+      assert_raise NotAFunctionError, fn ->
+        Manifest.build_branch("Not a function", success, failure)
+      end
+    end
+
+    test "no way to enforce arity of given functions", %{success: success, failure: failure} do
+      Manifest.build_branch(fn -> false end, success, failure)
+    end
+
+    test "no way to enforce return values of given functions", %{
+      success: success,
+      failure: failure
+    } do
+      Manifest.build_branch(fn _ -> {:error, :should_be_bool} end, success, failure)
+    end
+  end
+
+  describe "add_step/2" do
+    test "simply prepends step to steps list", %{placeholder: placeholder} do
+      step = Manifest.build_step(:atom, placeholder)
+      assert %Manifest{steps: [^step]} = Manifest.add_step(Manifest.new(), step)
+    end
+  end
+
+  describe "add_branch/2" do
+    test "simply prepends branch to steps list", %{placeholder: placeholder} do
+      step = Manifest.build_step(:atom, placeholder)
+      branch = Manifest.build_branch(fn _ -> true end, step, step)
+      assert %Manifest{steps: [^branch]} = Manifest.add_step(Manifest.new(), branch)
     end
   end
 
@@ -133,6 +171,50 @@ defmodule Manifest.Test do
 
       assert results.previous == %{first: 1}
       assert results.rollbacks == [first: {rollback, 2}]
+    end
+
+    test "branch with a true conditional will perform the first step" do
+      success =
+        Manifest.build_step(:success, fn _previous -> {:ok, nil} end, fn _id -> {:ok, nil} end)
+
+      failure =
+        Manifest.build_step(:failure, fn _previous -> {:error, :for_fun} end, fn _id ->
+          {:ok, nil}
+        end)
+
+      results =
+        Manifest.new()
+        |> Manifest.add_step(:first, fn _previous -> {:ok, nil} end, fn _id -> {:ok, nil} end)
+        |> Manifest.add_branch(
+          Manifest.build_branch(fn %{first: result} -> is_nil(result) end, success, failure)
+        )
+        |> Manifest.perform()
+
+      refute results.halt?
+      assert results.previous == %{first: nil, success: nil}
+    end
+
+    test "branch with a false conditional will perform the second step" do
+      success =
+        Manifest.build_step(:success, fn _previous -> {:ok, nil} end, fn _id -> {:ok, nil} end)
+
+      failure =
+        Manifest.build_step(:failure, fn _previous -> {:error, :for_fun} end, fn _id ->
+          {:ok, nil}
+        end)
+
+      results =
+        Manifest.new()
+        |> Manifest.add_step(:first, fn _previous -> {:ok, nil} end, fn _id -> {:ok, nil} end)
+        |> Manifest.add_branch(
+          Manifest.build_branch(fn %{first: result} -> not is_nil(result) end, success, failure)
+        )
+        |> Manifest.perform()
+
+      assert results.halt?
+      assert results.errored == :failure
+      assert results.previous == %{first: nil}
+      assert results.reason == :for_fun
     end
   end
 
