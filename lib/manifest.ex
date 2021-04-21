@@ -188,7 +188,7 @@ defmodule Manifest do
 
   You can also call `rollback/1` on a completely successful Manifest.
   """
-  @spec rollback(t()) :: {:ok, map()} | {:error, {atom(), any()}, map()}
+  @spec rollback(t()) :: {:ok, map()} | {:error, atom(), any(), map()}
   def rollback(%__MODULE__{rollbacks: rollbacks}), do: rollback(rollbacks, %{})
 
   defp perform([], manifest), do: manifest
