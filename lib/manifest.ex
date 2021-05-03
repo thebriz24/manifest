@@ -272,11 +272,16 @@ defmodule Manifest do
   defp rollback([], acc), do: {:ok, acc}
 
   defp rollback([{operation, {rollback, identifier, previous}} | rest], acc) do
-    case rollback.(identifier, previous) do
+    try do
+      rollback.(identifier, previous)
+    rescue
+      BadArityError -> rollback.(identifier)
+    else
       {:error, reason} -> {:error, operation, reason, acc}
       {_, return} -> rollback(rest, Map.put(acc, operation, return))
     end
+
   rescue
-    e in CaseClauseError -> raise MalformedReturnError, function: :rollback, term: e.term
+    e in TryClauseError -> raise MalformedReturnError, function: :rollback, term: e.term
   end
 end
