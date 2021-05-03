@@ -273,15 +273,20 @@ defmodule Manifest do
 
   defp rollback([{operation, {rollback, identifier, previous}} | rest], acc) do
     try do
-      rollback.(identifier, previous)
+      identifier
+      |> rollback.(previous)
+      |> handle_rollback(operation, rest, acc)
     rescue
-      BadArityError -> rollback.(identifier)
-    else
-      {:error, reason} -> {:error, operation, reason, acc}
-      {_, return} -> rollback(rest, Map.put(acc, operation, return))
+      BadArityError ->
+        identifier
+        |> rollback.()
+        |> handle_rollback(operation, rest, acc)
     end
-
-  rescue
-    e in TryClauseError -> raise MalformedReturnError, function: :rollback, term: e.term
   end
+
+  defp handle_rollback({:error, reason}, operation, _rest, acc), do: {:error, operation, reason, acc}
+
+  defp handle_rollback({_, return}, operation, rest, acc), do: rollback(rest, Map.put(acc, operation, return))
+
+  defp handle_rollback(term, _, _, _), do: raise MalformedReturnError, function: :rollback, term: term
 end
