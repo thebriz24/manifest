@@ -124,7 +124,7 @@ defmodule Manifest.Test do
     test "functions with malformed returns will fail during runtime" do
       assert_raise MalformedReturnError, fn ->
         Manifest.new()
-        |> Manifest.add_step(:atom, fn _ -> :not_valid_return end, fn _ -> :same end)
+        |> Manifest.add_step(:atom, fn _ -> :not_valid_return end, fn _, _ -> :same end)
         |> Manifest.perform()
       end
       assert_raise MalformedReturnError, fn ->
@@ -180,7 +180,7 @@ defmodule Manifest.Test do
     end
 
     test "work functions returning :ok tuple will add the rollback to the stack" do
-      rollback = fn _id -> {:ok, nil} end
+      rollback = fn _id, _prev -> {:ok, nil} end
 
       results =
         Manifest.new()
@@ -188,11 +188,11 @@ defmodule Manifest.Test do
         |> Manifest.perform()
 
       assert results.previous == %{first: 1}
-      assert results.rollbacks == [first: {rollback, 1}]
+      assert results.rollbacks == [first: {rollback, 1, %{}}]
     end
 
     test "parser functions returning :ok tuple will add the rollback to the stack with transformed identifier" do
-      rollback = fn _id -> {:ok, nil} end
+      rollback = fn _id, _prev -> {:ok, nil} end
 
       results =
         Manifest.new()
@@ -202,7 +202,7 @@ defmodule Manifest.Test do
         |> Manifest.perform()
 
       assert results.previous == %{first: 1}
-      assert results.rollbacks == [first: {rollback, 2}]
+      assert results.rollbacks == [first: {rollback, 2, %{}}]
     end
 
     test "branch with a true conditional will perform the first step" do
@@ -291,7 +291,7 @@ defmodule Manifest.Test do
     test "functions with malformed returns will fail during runtime" do
       assert_raise MalformedReturnError, fn ->
         Manifest.new()
-        |> Manifest.add_step(:atom, fn _ -> {:ok, :valid_return} end, fn _ -> :invalid_return end)
+        |> Manifest.add_step(:atom, fn _ -> {:ok, :valid_return} end, fn _, _ -> :invalid_return end)
         |> Manifest.perform()
         |> Manifest.rollback()
       end
@@ -300,11 +300,11 @@ defmodule Manifest.Test do
     test "rollback functions returning an :error tuple will simply stop trying to roll back" do
       results =
         Manifest.new()
-        |> Manifest.add_step(:first, fn _previous -> {:ok, nil} end, fn _id ->
+        |> Manifest.add_step(:first, fn _previous -> {:ok, nil} end, fn _id, _prev ->
           {:error, "can't rollback"}
         end)
-        |> Manifest.add_step(:second, fn _previous -> {:ok, nil} end, fn _id -> {:ok, nil} end)
-        |> Manifest.add_step(:third, fn _previous -> {:error, :for_fun} end, fn _id ->
+        |> Manifest.add_step(:second, fn _previous -> {:ok, nil} end, fn _id, _prev -> {:ok, nil} end)
+        |> Manifest.add_step(:third, fn _previous -> {:error, :for_fun} end, fn _id, _prev ->
           {:ok, nil}
         end)
         |> Manifest.perform()
@@ -316,9 +316,9 @@ defmodule Manifest.Test do
     test "returns the results of all rollbacks" do
       results =
         Manifest.new()
-        |> Manifest.add_step(:first, fn _previous -> {:ok, nil} end, fn _id -> {:ok, nil} end)
-        |> Manifest.add_step(:second, fn _previous -> {:ok, nil} end, fn _id -> {:ok, nil} end)
-        |> Manifest.add_step(:third, fn _previous -> {:error, :for_fun} end, fn _id ->
+        |> Manifest.add_step(:first, fn _previous -> {:ok, nil} end, fn _id, _prev -> {:ok, nil} end)
+        |> Manifest.add_step(:second, fn _previous -> {:ok, nil} end, fn _id, _prev -> {:ok, nil} end)
+        |> Manifest.add_step(:third, fn _previous -> {:error, :for_fun} end, fn _id, _prev ->
           {:ok, nil}
         end)
         |> Manifest.perform()
