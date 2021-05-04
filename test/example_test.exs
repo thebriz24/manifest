@@ -53,7 +53,7 @@ defmodule Example.Test do
           Cache.put(pid, token, id, record)
           {:ok, id}
         end,
-        fn id ->
+        fn id, %{cache_read: _, database_read: _} ->
           Cache.delete(pid, token, id)
           {:ok, id}
         end

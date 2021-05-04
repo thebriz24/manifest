@@ -42,7 +42,7 @@ defmodule Manifest do
   def build_step(
         operation,
         work,
-        rollback \\ &Step.safe_default_rollback/1,
+        rollback \\ &Step.safe_default_rollback/2,
         parser \\ &Step.default_parser/1
       )
 
@@ -97,7 +97,7 @@ defmodule Manifest do
         manifest,
         operation,
         work,
-        rollback \\ &Step.safe_default_rollback/1,
+        rollback \\ &Step.safe_default_rollback/2,
         parser \\ &Step.default_parser/1
       ) do
     step = build_step(operation, work, rollback, parser)
@@ -244,13 +244,13 @@ defmodule Manifest do
 
   defp handle_return(
          return,
-         manifest,
+         %{previous: previous} = manifest,
          step(operation: operation, parser: parser, rollback: rollback)
        ) do
     case parser.(return) do
       {:ok, identifier} ->
         manifest
-        |> stack_rollback(operation, {rollback, identifier})
+        |> stack_rollback(operation, {rollback, identifier, previous})
         |> put_previous(operation, return)
 
       {:error, reason} ->
@@ -271,12 +271,22 @@ defmodule Manifest do
 
   defp rollback([], acc), do: {:ok, acc}
 
-  defp rollback([{operation, {rollback, identifier}} | rest], acc) do
-    case rollback.(identifier) do
-      {:error, reason} -> {:error, operation, reason, acc}
-      {_, return} -> rollback(rest, Map.put(acc, operation, return))
+  defp rollback([{operation, {rollback, identifier, previous}} | rest], acc) do
+    try do
+      identifier
+      |> rollback.(previous)
+      |> handle_rollback(operation, rest, acc)
+    rescue
+      BadArityError ->
+        identifier
+        |> rollback.()
+        |> handle_rollback(operation, rest, acc)
     end
-  rescue
-    e in CaseClauseError -> raise MalformedReturnError, function: :rollback, term: e.term
   end
+
+  defp handle_rollback({:error, reason}, operation, _rest, acc), do: {:error, operation, reason, acc}
+
+  defp handle_rollback({_, return}, operation, rest, acc), do: rollback(rest, Map.put(acc, operation, return))
+
+  defp handle_rollback(term, _, _, _), do: raise MalformedReturnError, function: :rollback, term: term
 end

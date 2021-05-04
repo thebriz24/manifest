@@ -14,7 +14,7 @@ defmodule Manifest.Step do
   @type valid_returns :: {:ok, any()} | {:ok, :no_rollback, any()} | {:error, any()}
   @type work :: (map() -> valid_returns())
   @type parser :: (any() -> {:ok, any()} | {:error, any()})
-  @type rollback :: (any() -> {:ok, any()} | {:error, any()})
+  @type rollback :: (any(), map() -> {:ok, any()} | {:error, any()})
   @type t ::
           record(:step,
             operation: operation(),
@@ -27,7 +27,7 @@ defmodule Manifest.Step do
     operation: nil,
     work: &__MODULE__.default_work/1,
     parser: &__MODULE__.default_parser/1,
-    rollback: &__MODULE__.safe_default_rollback/1
+    rollback: &__MODULE__.safe_default_rollback/2
   )
 
   @doc false
@@ -35,5 +35,5 @@ defmodule Manifest.Step do
   @doc false
   def default_parser(identifier), do: {:ok, identifier}
   @doc false
-  def safe_default_rollback(_identifier), do: {:ok, :noop}
+  def safe_default_rollback(_identifier, _previous), do: {:ok, :noop}
 end
