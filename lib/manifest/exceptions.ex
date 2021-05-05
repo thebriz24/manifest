@@ -1,3 +1,9 @@
+defmodule Manifest.DuplicateOperationError do
+  defexception [:message]
+  @impl true
+  def exception(value), do: %__MODULE__{message: "Operation (#{value}) already exists."}
+end
+
 defmodule Manifest.NotAnAtomError do
   defexception [:message]
 

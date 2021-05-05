@@ -7,12 +7,27 @@ defmodule Manifest do
   """
 
   import __MODULE__.{Branch, Merge, Step}
-  alias __MODULE__.{Branch, MalformedReturnError, NotAnAtomError, NotAFunctionError, Step}
 
-  defstruct previous: %{}, steps: [], rollbacks: [], halt?: false, errored: nil, reason: nil
+  alias __MODULE__.{
+    Branch,
+    DuplicateOperationError,
+    MalformedReturnError,
+    NotAnAtomError,
+    NotAFunctionError,
+    Step
+  }
+
+  defstruct previous: %{},
+            operations: %MapSet{},
+            steps: [],
+            rollbacks: [],
+            halt?: false,
+            errored: nil,
+            reason: nil
 
   @type t :: %__MODULE__{
           steps: [Step.t()],
+          operations: MapSet.t(),
           previous: map(),
           rollbacks: [Step.rollback()],
           halt?: boolean(),
@@ -77,6 +92,15 @@ defmodule Manifest do
   """
 
   @spec add_step(t(), Step.t()) :: t()
+  def add_step(manifest, step(operation: operation) = step) do
+    if MapSet.member?(manifest.operations, operation),
+      do: raise(DuplicateOperationError, operation)
+
+    manifest
+    |> Map.update(:operations, MapSet.new([operation]), &MapSet.put(&1, operation))
+    |> Map.update(:steps, [step], &[step | &1])
+  end
+
   def add_step(manifest, step), do: Map.update(manifest, :steps, [step], &[step | &1])
 
   @doc """

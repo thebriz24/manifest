@@ -114,6 +114,7 @@ defmodule Manifest.Test do
         end)
         |> Manifest.perform()
       end
+
       assert_raise BadArityError, fn ->
         Manifest.new()
         |> Manifest.merge(fn -> Manifest.new() end)
@@ -127,6 +128,7 @@ defmodule Manifest.Test do
         |> Manifest.add_step(:atom, fn _ -> :not_valid_return end, fn _, _ -> :same end)
         |> Manifest.perform()
       end
+
       assert_raise MalformedReturnError, fn ->
         Manifest.new()
         |> Manifest.merge(fn _ -> :not_valid_return end)
